@@ -6,3 +6,8 @@ node_modules
 test-ledger
 .yarn
 .surfpool
+/agents
+.env
+.env.*
+*keypair*.json
+id.json

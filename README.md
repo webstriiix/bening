@@ -75,6 +75,25 @@ If the organizer does not document a milestone, the money does not move.
 - **Frontend:** `<Coming Soon>` with Solana wallet adapter (Phantom)
 - **Proof storage:** `<Coming Soon>`
 
+## Toolchain & Testing
+
+- `anchor-cli 1.2.1`
+- `solana-cli 4.1.2`
+- `rustc/cargo 1.89.0` (project, via `rust-toolchain.toml`)
+- `node v24.21.0`
+- `npm 11.19.0`
+
+Verified passing test commands:
+
+```bash
+cargo test --manifest-path programs/bening/Cargo.toml --test test_initialize
+cargo test --manifest-path programs/bening/Cargo.toml --test token_smoke
+```
+
+`anchor build` completes cleanly with `anchor-lang = "=1.2.1"` and `anchor-spl = "=1.2.1"`.
+
+---
+
 ## Getting started
 
 ### Prerequisites
