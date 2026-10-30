@@ -9,7 +9,7 @@ pub use constants::*;
 pub use instructions::*;
 pub use state::*;
 
-declare_id!("8Hij4EEoBRXk6hGEndDmpEZwJ644N4ztEy4pRUBLeH1u");
+declare_id!("GFfnEryqwJxNB1Ku1kcdmot1wpb1TCnZPWYhbPJnZ8oc");
 
 #[program]
 pub mod bening {
