@@ -7,7 +7,7 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-bening = "GFfnEryqwJxNB1Ku1kcdmot1wpb1TCnZPWYhbPJnZ8oc"
+bening = "3uemNohfUixociV872GGK1e4Dh2PRbPiNYT2SMgKXh5y"
 
 [provider]
 cluster = "localnet"

@@ -9,17 +9,20 @@ pub use constants::*;
 pub use instructions::*;
 pub use state::*;
 
-declare_id!("GFfnEryqwJxNB1Ku1kcdmot1wpb1TCnZPWYhbPJnZ8oc");
+declare_id!("3uemNohfUixociV872GGK1e4Dh2PRbPiNYT2SMgKXh5y");
 
 #[program]
 pub mod bening {
     use super::*;
 
-    pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
-        crate::instructions::initialize::handle_initialize(ctx)
-    }
-
-    pub fn increment(ctx: Context<Increment>) -> Result<()> {
-        crate::instructions::increment::handle_increment(ctx)
+    pub fn create_campaign(
+        ctx: Context<CreateCampaign>,
+        campaign_id: u64,
+        title: String,
+        metadata_uri: String,
+        verifier: Pubkey,
+        milestones: Vec<MilestoneInput>,
+    ) -> Result<()> {
+        handle_create_campaign(ctx, campaign_id, title, metadata_uri, verifier, milestones)
     }
 }

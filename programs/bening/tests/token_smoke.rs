@@ -1,8 +1,5 @@
 use {
-    anchor_lang::{
-        prelude::Pubkey,
-        solana_program::{instruction::Instruction, system_instruction},
-    },
+    anchor_lang::{prelude::Pubkey, solana_program::system_instruction},
     anchor_spl::token::spl_token::{
         self,
         instruction::{initialize_account3, initialize_mint2, mint_to, transfer},
@@ -60,7 +57,7 @@ fn token_smoke() {
     assert!(res.is_ok(), "mint init failed: {:?}", res);
 
     // Create two token accounts
-    let ata1 = Pubkey::find_program_address(
+    let _ata1 = Pubkey::find_program_address(
         &[
             &payer.pubkey().as_ref(),
             &spl_token::ID.as_ref(),
@@ -70,7 +67,7 @@ fn token_smoke() {
     )
     .0;
 
-    let ata2 = Pubkey::find_program_address(
+    let _ata2 = Pubkey::find_program_address(
         &[
             &payer.pubkey().as_ref(),
             &spl_token::ID.as_ref(),
