@@ -10,6 +10,16 @@ use anchor_lang::prelude::*;
 // - milestone.vendor == organizer/verifier/default          -> InvalidVendor
 // - milestone.amount == 0                                   -> InvalidAmount
 // - checked_add overflow while summing milestone amounts    -> TargetAmountOverflow
+// - campaign not Active                                     -> CampaignInactive
+// - donate: total_raised + amount > target                  -> DonationBeyondTarget
+// - donate: checked_add overflow on total_raised            -> DonationOverflow
+// - donate: wrong mint or donor token account owner mismatch -> InvalidMint
+// - submit_proof: only organizer may submit                -> NotOrganizer
+// - approve_milestone: only verifier may approve           -> NotVerifier
+// - milestone index out of range                            -> InvalidMilestoneIndex
+// - milestone not in correct status                        -> InvalidStatus
+// - proof_hash is all zeros                                 -> InvalidProofHash
+// - proof_uri length exceeds MAX_URI_LEN                    -> InvalidUriLength
 #[error_code]
 pub enum BeningError {
     #[msg("Maximum milestones exceeded")]
@@ -30,4 +40,24 @@ pub enum BeningError {
     InvalidMilestoneCount,
     #[msg("Target amount calculation overflow")]
     TargetAmountOverflow,
+    #[msg("Campaign is not active")]
+    CampaignInactive,
+    #[msg("Donation overflow: total raised would exceed target")]
+    DonationOverflow,
+    #[msg("Donation exceeds target amount")]
+    DonationBeyondTarget,
+    #[msg("Invalid mint or donor token account owner mismatch")]
+    InvalidMint,
+    #[msg("Only the organizer may submit a proof")]
+    NotOrganizer,
+    #[msg("Only the verifier may approve")]
+    NotVerifier,
+    #[msg("Milestone index out of range")]
+    InvalidMilestoneIndex,
+    #[msg("Milestone is not in the expected status")]
+    InvalidStatus,
+    #[msg("Proof hash must not be all zeros")]
+    InvalidProofHash,
+    #[msg("Proof URI length must be <= MAX_URI_LEN")]
+    InvalidUriLength,
 }

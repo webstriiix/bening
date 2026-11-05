@@ -58,3 +58,14 @@ pub struct Campaign {
     pub milestones: Vec<Milestone>,
     pub bump: u8,
 }
+
+#[account]
+#[derive(InitSpace)]
+pub struct Donation {
+    pub campaign: Pubkey,
+    pub donor: Pubkey,
+    pub amount: u64,
+    pub timestamp: i64,
+    pub index: u32,
+    pub bump: u8,
+}

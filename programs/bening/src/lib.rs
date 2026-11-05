@@ -25,4 +25,27 @@ pub mod bening {
     ) -> Result<()> {
         handle_create_campaign(ctx, campaign_id, title, metadata_uri, verifier, milestones)
     }
+
+    pub fn donate(
+        ctx: Context<Donate>,
+        amount: u64,
+    ) -> Result<()> {
+        handle_donate(ctx, amount)
+    }
+
+    pub fn submit_proof(
+        ctx: Context<SubmitProof>,
+        milestone_index: u8,
+        proof_hash: [u8; 32],
+        proof_uri: String,
+    ) -> Result<()> {
+        handle_submit_proof(ctx, milestone_index, proof_hash, proof_uri)
+    }
+
+    pub fn approve_milestone(
+        ctx: Context<ApproveMilestone>,
+        milestone_index: u8,
+    ) -> Result<()> {
+        handle_approve_milestone(ctx, milestone_index)
+    }
 }
