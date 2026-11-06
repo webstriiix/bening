@@ -1,25 +1,5 @@
 use anchor_lang::prelude::*;
 
-// Failure -> variant mapping (FR-7):
-// - milestones.len() == 0                                   -> InvalidMilestoneCount
-// - milestones.len() > MAX_MILESTONES                       -> MaxMilestonesExceeded
-// - title.len() == 0 or > MAX_TITLE_LEN                     -> InvalidTitleLength
-// - label.len() > MAX_LABEL_LEN                             -> InvalidLabelLength
-// - metadata_uri.len() > MAX_URI_LEN                        -> InvalidMetadataUriLength
-// - verifier == organizer or verifier == Pubkey::default()  -> InvalidVerifier
-// - milestone.vendor == organizer/verifier/default          -> InvalidVendor
-// - milestone.amount == 0                                   -> InvalidAmount
-// - checked_add overflow while summing milestone amounts    -> TargetAmountOverflow
-// - campaign not Active                                     -> CampaignInactive
-// - donate: total_raised + amount > target                  -> DonationBeyondTarget
-// - donate: checked_add overflow on total_raised            -> DonationOverflow
-// - donate: wrong mint or donor token account owner mismatch -> InvalidMint
-// - submit_proof: only organizer may submit                -> NotOrganizer
-// - approve_milestone: only verifier may approve           -> NotVerifier
-// - milestone index out of range                            -> InvalidMilestoneIndex
-// - milestone not in correct status                        -> InvalidStatus
-// - proof_hash is all zeros                                 -> InvalidProofHash
-// - proof_uri length exceeds MAX_URI_LEN                    -> InvalidUriLength
 #[error_code]
 pub enum BeningError {
     #[msg("Maximum milestones exceeded")]
@@ -60,4 +40,10 @@ pub enum BeningError {
     InvalidProofHash,
     #[msg("Proof URI length must be <= MAX_URI_LEN")]
     InvalidUriLength,
+    #[msg("Vendor token account mismatch (owner or mint)")]
+    InvalidVendorAccount,
+    #[msg("Vault does not have sufficient balance")]
+    InsufficientVaultBalance,
+    #[msg("Campaign status is not Released (reverted)")]
+    CampaignNotReleased,
 }

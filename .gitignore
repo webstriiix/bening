@@ -11,3 +11,4 @@ test-ledger
 .env.*
 *keypair*.json
 id.json
+memory/

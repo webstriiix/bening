@@ -9,3 +9,6 @@ pub use submit_proof::*;
 
 pub mod approve_milestone;
 pub use approve_milestone::*;
+
+pub mod release_funds;
+pub use release_funds::*;

@@ -48,4 +48,11 @@ pub mod bening {
     ) -> Result<()> {
         handle_approve_milestone(ctx, milestone_index)
     }
+
+    pub fn release_funds(
+        ctx: Context<ReleaseFunds>,
+        milestone_index: u8,
+    ) -> Result<()> {
+        handle_release_funds(ctx, milestone_index)
+    }
 }
