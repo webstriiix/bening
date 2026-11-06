@@ -12,10 +12,11 @@
     "@coral-xyz/anchor": "0.32.1",
     "@solana/spl-token": "0.4.15",
     "@solana/wallet-adapter-base": "0.9.28",
+    "@solana/wallet-adapter-phantom": "0.9.30",
     "@solana/wallet-adapter-react": "0.15.40",
     "@solana/wallet-adapter-react-ui": "0.9.40",
-    "@solana/wallet-adapter-wallets": "0.19.40",
-    "@solana/web3.js": "3.1.1",
+    "@solana/wallet-adapter-solflare": "0.6.34",
+    "@solana/web3.js": "1.99.0",
     "buffer": "6.0.3",
     "react": "19.3.1",
     "react-dom": "19.3.1",
@@ -24,8 +25,10 @@
   "devDependencies": {
     "@fontsource/space-grotesk": "5.3.0",
     "@fontsource/space-mono": "5.3.0",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.2.1",
-    "typescript": "7.0.2",
+    "typescript": "5.9.3",
     "vite": "8.3.6"
   }
 }
