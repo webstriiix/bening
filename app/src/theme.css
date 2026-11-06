@@ -1,0 +1,105 @@
+/* Theme tokens */
+:root {
+  --bg: #FFF6E5;
+  --ink: #111111;
+  --yellow: #FFD93D;
+  --pink: #FF6B9D;
+  --blue: #4D9DE0;
+  --green: #6BCB77;
+  --grey: #CFCFCF;
+  --white: #FFFFFF;
+}
+
+/* Base */
+body {
+  background-color: var(--bg);
+  color: var(--ink);
+  font-family: "Space Grotesk", "Space Mono", monospace;
+  margin: 0;
+  padding: 1rem;
+}
+
+/* Borders & shadows */
+.card {
+  border: 3px solid var(--ink);
+  box-shadow: 6px 6px 0 var(--ink);
+  border-radius: 0;
+}
+
+/* Buttons */
+.btn {
+  border: 3px solid var(--ink);
+  padding: 0.5rem 1rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background-color: var(--yellow);
+}
+
+.btn-danger {
+  background-color: var(--pink);
+}
+
+.btn-ok {
+  background-color: var(--green);
+}
+
+.btn-disabled {
+  background-color: var(--grey);
+}
+
+/* Badges */
+.badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 1px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.badge-pending {
+  background-color: var(--grey);
+  color: var(--ink);
+}
+
+.badge-proof-submitted {
+  background-color: var(--yellow);
+  color: var(--ink);
+}
+
+.badge-approved {
+  background-color: var(--blue);
+  color: var(--ink);
+}
+
+.badge-released {
+  background-color: var(--green);
+  color: var(--ink);
+}
+
+/* TextInput */
+.text-input {
+  font-family: "Space Grotesk", "Space Mono", monospace;
+  font-size: 0.875rem;
+}
+
+/* ProgressBar */
+.progress-bar {
+  height: 6px;
+  background-color: var(--ink);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background-color: var(--green);
+}
+
+/* Mono */
+.mono {
+  font-family: "Space Mono", monospace;
+  font-size: 0.875rem;
+}

@@ -1,0 +1,129 @@
+/* Component-level styles for base UI components */
+
+/* Button */
+.btn {
+  display: inline-block;
+  font-family: inherit;
+  font-weight: 600;
+  border: 3px solid var(--ink);
+  padding: 0.75rem 1.25rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: transform 0.05s ease;
+}
+
+.btn-primary {
+  background-color: var(--yellow);
+}
+
+.btn-danger {
+  background-color: var(--pink);
+}
+
+.btn-ok {
+  background-color: var(--green);
+}
+
+.btn-disabled {
+  background-color: var(--grey);
+  cursor: not-allowed;
+}
+
+.btn:active {
+  transform: translate(4px, 4px);
+}
+
+.btn:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: 2px;
+}
+
+/* Card */
+.card {
+  border: 3px solid var(--ink);
+  background-color: var(--white);
+  box-shadow: 6px 6px 0 var(--ink);
+  border-radius: 0;
+  padding: 1rem;
+}
+
+/* Badge */
+.badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border: 2px solid var(--ink);
+}
+
+.badge-pending {
+  background-color: var(--grey);
+  color: var(--ink);
+}
+
+.badge-proof-submitted {
+  background-color: var(--yellow);
+  color: var(--ink);
+}
+
+.badge-approved {
+  background-color: var(--blue);
+  color: var(--ink);
+}
+
+.badge-released {
+  background-color: var(--green);
+  color: var(--ink);
+}
+
+/* TextInput */
+.text-input {
+  font-family: "Space Grotesk", "Space Mono", monospace;
+  font-size: 0.875rem;
+  border: 3px solid var(--ink);
+  padding: 0.5rem;
+  border-radius: 0;
+  background-color: var(--white);
+  color: var(--ink);
+}
+
+.text-input:focus {
+  outline: 3px solid var(--blue);
+  outline-offset: 2px;
+}
+
+.text-input-label {
+  display: block;
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+
+/* ProgressBar */
+.progress-bar {
+  height: 12px;
+  background-color: var(--grey);
+  border: 2px solid var(--ink);
+  border-radius: 0;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background-color: var(--green);
+  transition: width 0.2s ease;
+}
+
+/* Mono */
+.mono {
+  font-family: "Space Mono", monospace;
+  font-size: 0.875rem;
+}
+
+/* Layout */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
