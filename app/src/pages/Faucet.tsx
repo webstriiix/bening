@@ -1,6 +1,12 @@
 import React, { useState } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { Keypair, PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
+import { sendAndConfirmPolling } from "../utils/sendAndConfirmPolling";
+
+/*
+ * NOTE: The UI is unverified. Only human tests in the browser can confirm
+ * the correctness of transactions, signatures, and on-chain state.
+ * This is a frontend-only implementation and should be validated by users.
+ */
 import {
   TOKEN_PROGRAM_ID,
   MINT_SIZE,
@@ -8,7 +14,9 @@ import {
   getAssociatedTokenAddress,
   createAssociatedTokenAccountInstruction,
   createMintToInstruction,
+  getAccount,
 } from "@solana/spl-token";
+import { Keypair, PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import TextInput from "../components/TextInput";
@@ -22,6 +30,31 @@ export const Faucet: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [tokenBalance, setTokenBalance] = useState<string | null>(null);
+  const [createdMint, setCreatedMint] = useState<string | null>(null);
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setMessage("Copied to clipboard!");
+    setTimeout(() => setMessage(""), 2000);
+  };
+
+  const fetchTokenBalance = async (mintPubkey: PublicKey) => {
+    if (!wallet.publicKey) return;
+    try {
+      const ata = await getAssociatedTokenAddress(mintPubkey, wallet.publicKey, true, TOKEN_PROGRAM_ID);
+      const accountInfo = await connection.getAccountInfo(ata);
+      if (accountInfo) {
+        const account = await getAccount(connection, ata);
+        setTokenBalance(account.amount.toString());
+      } else {
+        setTokenBalance("0");
+      }
+    } catch (err) {
+      console.error("Failed to fetch token balance:", err);
+      setTokenBalance("0");
+    }
+  };
 
   const handleCreateMint = async () => {
     if (!wallet.publicKey || !wallet.signTransaction) {
@@ -57,13 +90,20 @@ export const Faucet: React.FC = () => {
       tx.recentBlockhash = blockhash;
       tx.feePayer = wallet.publicKey;
 
+      // Signing order matters: the new mint account must sign BEFORE the wallet signs
+      // and BEFORE serialize(). Otherwise serialize() throws 'Missing signature'.
+      // Note: the method is tx.partialSign(keypair), not keypair.partialSign(tx).
       tx.partialSign(mintKeypair);
       const signed = await wallet.signTransaction(tx);
       const sig = await connection.sendRawTransaction(signed.serialize());
-      await connection.confirmTransaction(sig, "processed");
 
-      setMintAddress(mintKeypair.publicKey.toBase58());
-      setMessage(`Test mint created successfully! Mint: ${mintKeypair.publicKey.toBase58()} (Tx: ${sig})`);
+      // Send transaction via wallet signature; poll for confirmation only (no WebSocket confirmTransaction)
+      await sendAndConfirmPolling(connection, sig);
+
+      const mintStr = mintKeypair.publicKey.toBase58();
+      setCreatedMint(mintStr);
+      setMintAddress(mintStr); // Prefill the mint tokens input
+      setMessage(`Test mint created successfully! Mint: ${mintStr} (Tx: ${sig})`);
     } catch (err: any) {
       console.error(err);
       setError(parseAnchorError(err));
@@ -123,9 +163,14 @@ export const Faucet: React.FC = () => {
 
       const signed = await wallet.signTransaction(tx);
       const sig = await connection.sendRawTransaction(signed.serialize());
-      await connection.confirmTransaction(sig, "processed");
+
+      // Send transaction via wallet signature; poll for confirmation only (no WebSocket confirmTransaction)
+      await sendAndConfirmPolling(connection, sig);
 
       setMessage(`Minted ${amountVal} tokens to your ATA! (Tx: ${sig})`);
+      
+      // Fetch and show token balance
+      await fetchTokenBalance(mintPubkey);
     } catch (err: any) {
       console.error(err);
       setError(parseAnchorError(err));
@@ -159,6 +204,20 @@ export const Faucet: React.FC = () => {
             <Button variant="primary" onClick={handleCreateMint} disabled={loading || !wallet.connected}>
               {loading ? "Processing..." : "Create test mint"}
             </Button>
+            
+            {createdMint && (
+              <div style={{ marginTop: "1rem", display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+                <span style={{ fontWeight: 700 }}>Created Mint:</span>
+                <TextInput
+                  value={createdMint}
+                  readOnly
+                  style={{ flex: 1, minWidth: "200px" }}
+                />
+                <button className="btn btn-ok" onClick={() => copyToClipboard(createdMint)} style={{ padding: "0.25rem 0.5rem" }}>
+                  Copy
+                </button>
+              </div>
+            )}
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: "1rem", borderTop: "2px solid var(--ink)", paddingTop: "1rem" }}>
@@ -178,6 +237,16 @@ export const Faucet: React.FC = () => {
             <Button variant="ok" onClick={handleMintTokens} disabled={loading || !wallet.connected}>
               {loading ? "Processing..." : "Mint tokens to me"}
             </Button>
+
+            {tokenBalance !== null && (
+              <div style={{ marginTop: "0.75rem", padding: "0.75rem", backgroundColor: "var(--bg)", border: "2px solid var(--ink)" }}>
+                <strong>Your Token Balance: </strong>
+                <span style={{ fontFamily: "monospace" }}>{tokenBalance} base units</span>
+                {mintAddress && (
+                  <span style={{ marginLeft: "1rem" }}>({Number(tokenBalance) / 1_000_000} whole tokens)</span>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </Card>

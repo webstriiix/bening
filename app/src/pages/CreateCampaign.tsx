@@ -6,6 +6,7 @@ import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, getAssociatedTokenAddres
 import BN from "bn.js";
 import { getProgram } from "../utils/anchorProvider";
 import { parseAnchorError } from "../utils/errors";
+import { sendAndConfirmPolling } from "../utils/sendAndConfirmPolling";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import TextInput from "../components/TextInput";
@@ -182,7 +183,8 @@ export const CreateCampaign: React.FC = () => {
         7. associated_token_program
         8. rent
       */
-      const txSig = await (program.methods as any)
+      // Build the transaction only; the wallet signs it and we poll for status.
+      const tx = await (program.methods as any)
         .createCampaign(
           campaignIdBn,
           title.trim(),
@@ -200,7 +202,17 @@ export const CreateCampaign: React.FC = () => {
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           rent: SYSVAR_RENT_PUBKEY,
         })
-        .rpc();
+        .transaction();
+
+      // Anchor's .transaction() does not set blockhash/fee payer; the wallet needs them.
+      const { blockhash } = await connection.getLatestBlockhash("confirmed");
+      tx.recentBlockhash = blockhash;
+      tx.feePayer = organizer;
+
+      // Signature is obtained from sendRawTransaction after wallet.signTransaction.
+      const signed = await wallet.signTransaction(tx);
+      const txSig = await connection.sendRawTransaction(signed.serialize());
+      await sendAndConfirmPolling(connection, txSig);
 
       setLoading(false);
       // Auto-redirect on success to /c/<campaign_pda>, passing sig via router state
