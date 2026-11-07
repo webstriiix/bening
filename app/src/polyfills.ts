@@ -7,5 +7,5 @@ declare global {
 }
 
 if (!globalThis.Buffer) {
-  globalThis.Buffer = Buffer;
+  globalThis.Buffer = Buffer as any;
 }

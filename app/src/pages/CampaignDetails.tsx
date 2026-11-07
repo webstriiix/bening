@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useLocation } from "react-router-dom";
 import { Connection, PublicKey } from "@solana/web3.js";
-import { getProgram, parseEnumStatus } from "../utils/anchorHelper";
+import { getReadOnlyProgram } from "../utils/anchorProvider";
+import { parseEnumStatus } from "../utils/anchorHelper";
 import { getMint } from "@solana/spl-token";
 import { formatAmount, shortenAddress } from "../utils/format";
 import Card from "../components/Card";
@@ -14,6 +15,9 @@ const DEVNET_RPC = "https://api.devnet.solana.com";
 
 export const CampaignDetails: React.FC = () => {
   const { campaignPda } = useParams<{ campaignPda: string }>();
+  const location = useLocation();
+  const stateTxSig = (location.state as any)?.txSig as string | undefined;
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [campaignData, setCampaignData] = useState<any>(null);
@@ -37,12 +41,12 @@ export const CampaignDetails: React.FC = () => {
           return;
         }
 
-        const connection = new Connection(DEVNET_RPC, "processed");
-        const program = getProgram(connection);
+        const connection = new Connection(DEVNET_RPC, "confirmed");
+        const program = getReadOnlyProgram();
 
         let account: any;
         try {
-          account = await (program.account.campaign as any).fetch(pubkey);
+          account = await ((program as any).account.campaign).fetch(pubkey);
         } catch (e) {
           setError("Campaign not found.");
           setLoading(false);
@@ -99,9 +103,9 @@ export const CampaignDetails: React.FC = () => {
   const organizerStr = campaignData.organizer ? campaignData.organizer.toBase58() : "";
   const verifierStr = campaignData.verifier ? campaignData.verifier.toBase58() : "";
 
-  const targetAmountNum = Number(campaignData.targetAmount ?? campaignData.target_amount ?? 0);
-  const totalRaisedNum = Number(campaignData.totalRaised ?? campaignData.total_raised ?? 0);
-  const totalReleasedNum = Number(campaignData.totalReleased ?? campaignData.total_released ?? 0);
+  const targetAmountNum = Number(campaignData.targetAmount?.toString() ?? campaignData.target_amount?.toString() ?? 0);
+  const totalRaisedNum = Number(campaignData.totalRaised?.toString() ?? campaignData.total_raised?.toString() ?? 0);
+  const totalReleasedNum = Number(campaignData.totalReleased?.toString() ?? campaignData.total_released?.toString() ?? 0);
 
   const formattedRaised = formatAmount(totalRaisedNum, mintDecimals);
   const formattedTarget = formatAmount(targetAmountNum, mintDecimals);
@@ -114,6 +118,26 @@ export const CampaignDetails: React.FC = () => {
           <Button variant="primary">← Back</Button>
         </Link>
       </div>
+
+      {stateTxSig && (
+        <div style={{ backgroundColor: "var(--green)", padding: "1rem", border: "3px solid var(--ink)" }}>
+          <h3 style={{ fontWeight: 750, marginBottom: "0.5rem" }}>Campaign Created Successfully!</h3>
+          <p style={{ fontSize: "0.875rem", marginBottom: "0.5rem" }}>
+            <strong>Transaction Signature:</strong>
+          </p>
+          <Mono text={stateTxSig} style={{ wordBreak: "break-all", marginBottom: "0.5rem" }} />
+          <p style={{ fontSize: "0.875rem" }}>
+            <a
+              href={`https://explorer.solana.com/tx/${stateTxSig}?cluster=devnet`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: "var(--ink)", fontWeight: 700, textDecoration: "underline" }}
+            >
+              View on Solana Explorer ↗
+            </a>
+          </p>
+        </div>
+      )}
 
       <Card title={campaignData.title || "Campaign Details"}>
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
@@ -167,14 +191,14 @@ export const CampaignDetails: React.FC = () => {
       {campaignData.milestones && campaignData.milestones.length > 0 ? (
         campaignData.milestones.map((m: any, idx: number) => {
           const mStatus = parseEnumStatus(m.status);
-          const mAmountNum = Number(m.amount ?? 0);
+          const mAmountNum = Number(m.amount?.toString() ?? 0);
           const formattedMAmount = formatAmount(mAmountNum, mintDecimals);
           const vendorStr = m.vendor ? m.vendor.toBase58() : "";
           const proofUri = m.proofUri || m.proof_uri;
 
-          const submittedAt = Number(m.proofSubmittedAt ?? m.proof_submitted_at ?? 0);
-          const approvedAt = Number(m.approvedAt ?? m.approved_at ?? 0);
-          const releasedAt = Number(m.releasedAt ?? m.released_at ?? 0);
+          const submittedAt = Number(m.proofSubmittedAt?.toString() ?? m.proof_submitted_at?.toString() ?? 0);
+          const approvedAt = Number(m.approvedAt?.toString() ?? m.approved_at?.toString() ?? 0);
+          const releasedAt = Number(m.releasedAt?.toString() ?? m.released_at?.toString() ?? 0);
 
           return (
             <Card key={idx} title={`Milestone #${idx + 1}: ${m.label || "Untitled"}`}>

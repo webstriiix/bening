@@ -5,6 +5,8 @@ import { PhantomWalletAdapter } from "@solana/wallet-adapter-phantom";
 import { SolflareWalletAdapter } from "@solana/wallet-adapter-solflare";
 import { Home } from "./pages/Home";
 import { CampaignDetails } from "./pages/CampaignDetails";
+import { CreateCampaign } from "./pages/CreateCampaign";
+import { Faucet } from "./pages/Faucet";
 import { Navbar } from "./components/Navbar";
 
 const endpoint = "https://api.devnet.solana.com";
@@ -20,6 +22,8 @@ const App: React.FC = () => {
             <main className="container">
               <Routes>
                 <Route path="/" element={<Home />} />
+                <Route path="/create" element={<CreateCampaign />} />
+                <Route path="/faucet" element={<Faucet />} />
                 <Route path="/c/:campaignPda" element={<CampaignDetails />} />
               </Routes>
             </main>
