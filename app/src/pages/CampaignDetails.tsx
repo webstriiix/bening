@@ -22,8 +22,7 @@ import TextInput from "../components/TextInput";
 import ProgressBar from "../components/ProgressBar";
 
 /*
- * NOTE: This UI is UNVERIFIED. Only the human tests it in the browser.
- * Nothing here has been validated by an automated browser or E2E run.
+ * NOTE: The UI is unverified; only the human tests in the browser.
  */
 
 type BadgeStatus = "pending" | "proof_submitted" | "approved" | "released";
@@ -35,6 +34,16 @@ interface MilestoneView {
   vendor: string;
   status: BadgeStatus;
   proofUri: string;
+  proofSubmittedAt: number;
+  approvedAt: number;
+  releasedAt: number;
+}
+
+interface DonationView {
+  donor: string;
+  amount: BN;
+  timestamp: number;
+  index: number;
 }
 
 interface CampaignView {
@@ -77,14 +86,6 @@ function normalizeStatus(raw: unknown): BadgeStatus {
 
 /**
  * Parse a decimal token string into base units without any floating point.
- *
- * Rules:
- * - whitespace is stripped, empty input is rejected
- * - only digits and a single "." are allowed
- * - fractional digits must not exceed mintDecimals
- * - the value must be strictly positive
- *
- * Returns the base-unit amount as a BN.
  */
 export function parseTokenAmount(input: string, mintDecimals: number): BN {
   const cleaned = input.replace(/\s+/g, "");
@@ -119,6 +120,11 @@ function formatBaseUnits(value: BN, decimals: number): string {
   return fraction ? `${whole}.${fraction}` : whole;
 }
 
+function formatTimestamp(ts: number): string {
+  if (!ts || ts <= 0) return "-";
+  return new Date(ts * 1000).toLocaleString();
+}
+
 function toHex(bytes: Uint8Array): string {
   return Array.from(bytes)
     .map((b) => b.toString(16).padStart(2, "0"))
@@ -135,6 +141,8 @@ export const CampaignDetails: React.FC = () => {
   const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(true);
   const [mintDecimals, setMintDecimals] = useState<number | null>(null);
+  const [vaultBalance, setVaultBalance] = useState<BN>(new BN(0));
+  const [donations, setDonations] = useState<DonationView[]>([]);
 
   // Donate panel
   const [donateAmount, setDonateAmount] = useState("");
@@ -154,10 +162,15 @@ export const CampaignDetails: React.FC = () => {
   const [approvingIndex, setApprovingIndex] = useState<number | null>(null);
   const [approveError, setApproveError] = useState("");
 
+  // Release panel
+  const [releasingIndex, setReleasingIndex] = useState<number | null>(null);
+  const [releaseError, setReleaseError] = useState("");
+  const [releaseSig, setReleaseSig] = useState<string | null>(null);
+
   const walletAddress = wallet?.publicKey ? wallet.publicKey.toBase58() : null;
 
   /* ------------------------------------------------------------------ */
-  /* Campaign loading                                                    */
+  /* Campaign loading & Donations                                      */
   /* ------------------------------------------------------------------ */
 
   const fetchCampaign = useCallback(async () => {
@@ -177,14 +190,16 @@ export const CampaignDetails: React.FC = () => {
     }
 
     try {
-      // Read-only program: account fetches do not need a connected wallet
-      const program = getProgram(wallet ?? ({
-        publicKey: PublicKey.default,
-        signTransaction: async (tx: any) => tx,
-        signAllTransactions: async (txs: any) => txs,
-      } as any));
+      const readProgram = getProgram(
+        wallet ??
+          ({
+            publicKey: PublicKey.default,
+            signTransaction: async (tx: any) => tx,
+            signAllTransactions: async (txs: any) => txs,
+          } as any)
+      );
 
-      const account = await (program.account as any).campaign.fetch(campaignKey);
+      const account = await (readProgram.account as any).campaign.fetch(campaignKey);
 
       const milestones: MilestoneView[] = (account.milestones as any[]).map((m, index) => ({
         index,
@@ -193,6 +208,9 @@ export const CampaignDetails: React.FC = () => {
         vendor: (m.vendor as PublicKey).toBase58(),
         status: normalizeStatus(m.status),
         proofUri: (m.proofUri as string) || "",
+        proofSubmittedAt: Number(m.proofSubmittedAt || 0),
+        approvedAt: Number(m.approvedAt || 0),
+        releasedAt: Number(m.releasedAt || 0),
       }));
 
       const statusKey =
@@ -200,7 +218,7 @@ export const CampaignDetails: React.FC = () => {
           ? account.status
           : Object.keys(account.status || {})[0] || "Active";
 
-      setCampaign({
+      const campaignView: CampaignView = {
         address: campaignKey.toBase58(),
         organizer: (account.organizer as PublicKey).toBase58(),
         verifier: (account.verifier as PublicKey).toBase58(),
@@ -212,11 +230,47 @@ export const CampaignDetails: React.FC = () => {
         totalRaised: new BN((account.totalRaised as any).toString()),
         donationCount: Number(account.donationCount),
         milestones,
-      });
+      };
+
+      setCampaign(campaignView);
       setLoadError("");
 
-      const mintInfo = await getMint(connection, account.mint as PublicKey);
+      const mintPubkey = account.mint as PublicKey;
+      const mintInfo = await getMint(connection, mintPubkey);
       setMintDecimals(mintInfo.decimals);
+
+      // Fetch vault balance
+      try {
+        const vaultAta = await getAssociatedTokenAddress(
+          mintPubkey,
+          campaignKey,
+          true,
+          TOKEN_PROGRAM_ID
+        );
+        const vaultAcc = await getAccount(connection, vaultAta, "confirmed", TOKEN_PROGRAM_ID);
+        setVaultBalance(new BN(vaultAcc.amount.toString()));
+      } catch {
+        setVaultBalance(new BN(0));
+      }
+
+      // Fetch donations for this campaign (capped at 50 newest)
+      try {
+        const allDonations = await (readProgram.account as any).donation.all();
+        const filtered: DonationView[] = allDonations
+          .filter((d: any) => (d.account.campaign as PublicKey).equals(campaignKey))
+          .map((d: any) => ({
+            donor: (d.account.donor as PublicKey).toBase58(),
+            amount: new BN((d.account.amount as any).toString()),
+            timestamp: Number(d.account.timestamp || 0),
+            index: Number(d.account.index || 0),
+          }))
+          .sort((a: DonationView, b: DonationView) => b.index - a.index)
+          .slice(0, 50);
+        setDonations(filtered);
+      } catch (err) {
+        console.error("Failed to fetch donations:", err);
+        setDonations([]);
+      }
     } catch (err: any) {
       console.error(err);
       setLoadError(
@@ -232,7 +286,6 @@ export const CampaignDetails: React.FC = () => {
     void fetchCampaign();
   }, [fetchCampaign]);
 
-  // Read the donor's current balance for this mint (for the "no tokens" hint)
   const fetchDonorBalance = useCallback(async () => {
     if (!wallet?.publicKey || !campaign) {
       setDonorBalance(null);
@@ -249,7 +302,6 @@ export const CampaignDetails: React.FC = () => {
         const account = await getAccount(connection, ata, "confirmed", TOKEN_PROGRAM_ID);
         setDonorBalance(new BN(account.amount.toString()));
       } catch {
-        // No token account yet means a zero balance
         setDonorBalance(new BN(0));
       }
     } catch (err) {
@@ -263,29 +315,24 @@ export const CampaignDetails: React.FC = () => {
   }, [fetchDonorBalance]);
 
   /* ------------------------------------------------------------------ */
-  /* Role checks: strict base58 string equality, never object identity   */
+  /* Role checks & Status                                              */
   /* ------------------------------------------------------------------ */
 
   const isConnected = walletAddress !== null;
   const isOrganizer = isConnected && campaign !== null && walletAddress === campaign.organizer;
   const isVerifier = isConnected && campaign !== null && walletAddress === campaign.verifier;
   const isCampaignActive = campaign?.status === "active";
+  const allMilestonesReleased =
+    campaign !== null &&
+    campaign.milestones.length > 0 &&
+    campaign.milestones.every((m) => m.status === "released");
 
   /* ------------------------------------------------------------------ */
-  /* Transaction helper: build tx, sign with the wallet, poll for status */
+  /* Transaction sender helper                                         */
   /* ------------------------------------------------------------------ */
 
-  /**
-   * Send a pre-built transaction with the connected wallet.
-   *
-   * How the signature is obtained: `wallet.signTransaction(tx)` asks the
-   * wallet adapter to sign locally, then `connection.sendRawTransaction`
-   * returns the transaction signature which we poll with
-   * sendAndConfirmPolling (no WebSocket confirmTransaction).
-   */
   const sendWithWallet = async (tx: any): Promise<string> => {
     if (!wallet?.publicKey) throw new Error("Please connect your wallet first.");
-    // Anchor's .transaction() does not set these; the wallet needs them to sign.
     const { blockhash } = await connection.getLatestBlockhash("confirmed");
     tx.recentBlockhash = blockhash;
     tx.feePayer = wallet.publicKey;
@@ -341,13 +388,6 @@ export const CampaignDetails: React.FC = () => {
         TOKEN_PROGRAM_ID
       );
 
-      /*
-       * Donation PDA, derived fresh from the LIVE campaign account right
-       * before sending. Verified against programs/bening/src/instructions/
-       * donate.rs and state.rs (Donation::index is u32):
-       *   seeds = [b"donation", campaign.key().as_ref(), campaign.donation_count.to_le_bytes()]
-       * donation_count is u32, so to_le_bytes() = exactly 4 bytes little-endian.
-       */
       const deriveDonationPda = async (): Promise<PublicKey> => {
         const live = await (program.account as any).campaign.fetch(campaignKey);
         const countBytes = new Uint8Array(4);
@@ -358,43 +398,20 @@ export const CampaignDetails: React.FC = () => {
         );
         return pda;
       };
+
       let donationPda: PublicKey;
       try {
         donationPda = await deriveDonationPda();
       } catch (firstErr) {
         console.error("Donation PDA derivation failed, retrying once:", firstErr);
-        setDonateError("Could not read the latest campaign state; retrying once...");
         donationPda = await deriveDonationPda();
-        setDonateError("");
       }
 
-      // Does the donor already own a token account for this mint?
       const donorAtaExists = await connection
         .getAccountInfo(donorAta, "confirmed")
         .then((info) => info !== null)
         .catch(() => false);
 
-      /*
-       * donate instruction, copied from the IDL in bening.json.
-       *
-       * args:
-       *   amount: u64
-       *
-       * accounts (name / writable / signer):
-       *   donor                    mut  signer
-       *   campaign                 mut
-       *   donation                 mut   (PDA, init: seeds ["donation", campaign, donation_count u32 LE])
-       *   donorAta                 mut   (ATA of donor for mint)
-       *   vault                    mut   (ATA of campaign PDA for mint)
-       *   mint                     mut
-       *   systemProgram
-       *   tokenProgram
-       *   associatedTokenProgram
-       *   clock                    (Sysvar<Clock>, required by the handler)
-       *
-       * Every PDA/sysvar above is passed explicitly so Anchor does not have
-       * to resolve anything itself.
-       */
       const tx = await (program.methods as any)
         .donate(baseUnits)
         .accounts({
@@ -411,7 +428,6 @@ export const CampaignDetails: React.FC = () => {
         })
         .transaction();
 
-      // Create the donor ATA idempotently in the SAME transaction when missing.
       if (!donorAtaExists) {
         const createAtaIx = createAssociatedTokenAccountIdempotentInstruction(
           wallet.publicKey,
@@ -427,7 +443,6 @@ export const CampaignDetails: React.FC = () => {
       setDonateSig(signature);
       setDonateAmount("");
 
-      // Refetch campaign and donor balance after confirmation
       await fetchCampaign();
       await fetchDonorBalance();
     } catch (err: any) {
@@ -480,18 +495,6 @@ export const CampaignDetails: React.FC = () => {
       const campaignKey = new PublicKey(campaign.address);
       const program = getProgram(wallet!);
 
-      /*
-       * submit_proof instruction, copied from the IDL in bening.json.
-       *
-       * args:
-       *   milestoneIndex: u8
-       *   proofHash:      [u8; 32]
-       *   proofUri:       string
-       *
-       * accounts:
-       *   organizer  signer (must equal campaign.organizer)
-       *   campaign   mut (PDA, seeds ["campaign", organizer, campaign_id u64 LE])
-       */
       const tx = await (program.methods as any)
         .submitProof(proofMilestone, Array.from(hashArr), trimmedUrl)
         .accounts({
@@ -514,7 +517,7 @@ export const CampaignDetails: React.FC = () => {
   };
 
   /* ------------------------------------------------------------------ */
-  /* C.3 Approve milestone (verifier only), one per milestone           */
+  /* C.3 Approve milestone (verifier only)                              */
   /* ------------------------------------------------------------------ */
 
   const handleApprove = async (milestoneIndex: number) => {
@@ -531,16 +534,6 @@ export const CampaignDetails: React.FC = () => {
       const campaignKey = new PublicKey(campaign.address);
       const program = getProgram(wallet!);
 
-      /*
-       * approve_milestone instruction, copied from the IDL in bening.json.
-       *
-       * args:
-       *   milestoneIndex: u8
-       *
-       * accounts:
-       *   verifier  signer (has_one = campaign.verifier)
-       *   campaign  mut (PDA, seeds ["campaign", organizer, campaign_id u64 LE])
-       */
       const tx = await (program.methods as any)
         .approveMilestone(milestoneIndex)
         .accounts({
@@ -556,6 +549,100 @@ export const CampaignDetails: React.FC = () => {
       setApproveError(`Approve failed. ${parseAnchorError(err)}`);
     } finally {
       setApprovingIndex(null);
+    }
+  };
+
+  /* ------------------------------------------------------------------ */
+  /* Task 1 — Release Funds (any connected wallet)                      */
+  /* ------------------------------------------------------------------ */
+
+  const handleRelease = async (milestoneIndex: number) => {
+    if (!isConnected) {
+      setReleaseError("Please connect your wallet first.");
+      return;
+    }
+    if (!campaign) return;
+
+    const milestone = campaign.milestones[milestoneIndex];
+    if (!milestone) return;
+
+    if (vaultBalance.lt(milestone.amount)) {
+      setReleaseError("Vault does not hold enough tokens yet; donate first.");
+      return;
+    }
+
+    setReleasingIndex(milestoneIndex);
+    setReleaseError("");
+    setReleaseSig(null);
+
+    try {
+      const campaignKey = new PublicKey(campaign.address);
+      const mintKey = new PublicKey(campaign.mint);
+      const vendorPubkey = new PublicKey(milestone.vendor);
+      const program = getProgram(wallet!);
+
+      const vault = await getAssociatedTokenAddress(
+        mintKey,
+        campaignKey,
+        true,
+        TOKEN_PROGRAM_ID
+      );
+      const vendorTokenAccount = await getAssociatedTokenAddress(
+        mintKey,
+        vendorPubkey,
+        false,
+        TOKEN_PROGRAM_ID
+      );
+
+      /*
+       * release_funds instruction, copied from the IDL in bening.json.
+       *
+       * args:
+       *   milestoneIndex: u8
+       *
+       * accounts:
+       *   caller             signer (any connected wallet)
+       *   campaign           mut (PDA, seeds ["campaign", organizer, campaign_id u64 LE])
+       *   mint               (campaign mint)
+       *   vault              mut (ATA of campaign PDA for mint)
+       *   vendorTokenAccount mut (ATA of milestone.vendor for mint)
+       *   tokenProgram       (TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA)
+       */
+      const tx = await (program.methods as any)
+        .releaseFunds(milestoneIndex)
+        .accounts({
+          caller: wallet!.publicKey,
+          campaign: campaignKey,
+          mint: mintKey,
+          vault,
+          vendorTokenAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .transaction();
+
+      // Idempotent ATA creation for the vendor ATA in the SAME transaction
+      const createVendorAtaIx = createAssociatedTokenAccountIdempotentInstruction(
+        wallet!.publicKey,
+        vendorTokenAccount,
+        vendorPubkey,
+        mintKey,
+        TOKEN_PROGRAM_ID
+      );
+      tx.instructions.unshift(createVendorAtaIx);
+
+      const signature = await sendWithWallet(tx);
+      setReleaseSig(signature);
+      await fetchCampaign();
+    } catch (err: any) {
+      console.error(err);
+      const msg = parseAnchorError(err);
+      if (msg.includes("InsufficientVaultBalance") || err.message?.includes("InsufficientVaultBalance")) {
+        setReleaseError("Vault does not hold enough tokens yet; donate first.");
+      } else {
+        setReleaseError(`Release failed. ${msg}`);
+      }
+    } finally {
+      setReleasingIndex(null);
     }
   };
 
@@ -579,6 +666,7 @@ export const CampaignDetails: React.FC = () => {
 
   const pendingMilestones = campaign.milestones.filter((m) => m.status === "pending");
   const submittedMilestones = campaign.milestones.filter((m) => m.status === "proof_submitted");
+  const approvedMilestones = campaign.milestones.filter((m) => m.status === "approved");
   const decimals = mintDecimals ?? 0;
   const raised = campaign.totalRaised.toNumber();
   const target = campaign.targetAmount.toNumber();
@@ -592,12 +680,19 @@ export const CampaignDetails: React.FC = () => {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", paddingBottom: "2rem" }}>
+      {/* Campaign Completed Banner */}
+      {(campaign.status === "completed" || allMilestonesReleased) && (
+        <div style={{ backgroundColor: "var(--green)", color: "var(--ink)", padding: "1.25rem", border: "3px solid var(--ink)", boxShadow: "6px 6px 0 var(--ink)", fontWeight: 800, fontSize: "1.25rem", textAlign: "center" }}>
+          Campaign completed
+        </div>
+      )}
+
       {/* Campaign header */}
       <Card title={campaign.title || "Untitled campaign"}>
         <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
           <div>
             <strong>Status: </strong>
-            {campaign.status === "completed" ? "Completed" : "Active"}
+            {campaign.status === "completed" || allMilestonesReleased ? "Completed" : "Active"}
           </div>
           <Mono text={`Campaign PDA: ${campaign.address}`} />
           <Mono text={`Mint: ${campaign.mint}`} />
@@ -616,6 +711,74 @@ export const CampaignDetails: React.FC = () => {
               <Mono text={`Expected Organizer: ${campaign.organizer}`} />
               <Mono text={`Expected Verifier:  ${campaign.verifier}`} />
             </div>
+          )}
+        </div>
+      </Card>
+
+      {/* Task 2.1 — Public Milestone Timeline (Read-Only) */}
+      <Card title="Milestone Timeline">
+        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+          {campaign.milestones.map((m) => {
+            // Compute vendor ATA for explorer link when released
+            // (We can display a note or link if released)
+            return (
+              <div key={m.index} style={{ border: "2px solid var(--ink)", padding: "1rem", backgroundColor: "var(--bg)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
+                  <strong>
+                    {m.index + 1}. {m.label}
+                  </strong>
+                  <Badge status={m.status}>{m.status.replace("_", " ")}</Badge>
+                </div>
+                <div style={{ fontSize: "0.875rem", marginBottom: "0.25rem" }}>
+                  Amount: {formatBaseUnits(m.amount, decimals)} tokens
+                </div>
+                <div style={{ fontSize: "0.8125rem", marginBottom: "0.25rem" }}>
+                  Vendor:{" "}
+                  <a
+                    href={`https://explorer.solana.com/address/${m.vendor}?cluster=devnet`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Mono text={m.vendor} style={{ display: "inline" }} /> ↗
+                  </a>
+                </div>
+                {m.proofUri && m.proofUri.startsWith("https://") && (
+                  <div style={{ fontSize: "0.875rem", wordBreak: "break-all", marginBottom: "0.25rem" }}>
+                    Proof URL:{" "}
+                    <a href={m.proofUri} target="_blank" rel="noopener noreferrer">
+                      {m.proofUri} ↗
+                    </a>
+                  </div>
+                )}
+                <div style={{ fontSize: "0.75rem", marginTop: "0.5rem", display: "flex", flexDirection: "column", gap: "0.15rem", opacity: 0.85 }}>
+                  <div>Proof Submitted: {formatTimestamp(m.proofSubmittedAt)}</div>
+                  <div>Approved: {formatTimestamp(m.approvedAt)}</div>
+                  <div>Released: {formatTimestamp(m.releasedAt)}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+
+      {/* Task 2.2 — Donations List (Read-Only) */}
+      <Card title="Donations">
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          {donations.length === 0 ? (
+            <div style={{ fontWeight: 700 }}>No donations yet.</div>
+          ) : (
+            donations.map((d, idx) => (
+              <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--ink)", paddingBottom: "0.5rem", gap: "1rem", flexWrap: "wrap" }}>
+                <div>
+                  <span style={{ fontSize: "0.75rem", fontWeight: 700, marginRight: "0.5rem" }}>#{d.index + 1}</span>
+                  <Mono text={d.donor} style={{ display: "inline" }} />
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontWeight: 700 }}>{formatBaseUnits(d.amount, decimals)} tokens</div>
+                  <div style={{ fontSize: "0.75rem", opacity: 0.75 }}>{formatTimestamp(d.timestamp)}</div>
+                </div>
+              </div>
+            ))
           )}
         </div>
       </Card>
@@ -661,34 +824,6 @@ export const CampaignDetails: React.FC = () => {
               </a>
             </div>
           )}
-        </div>
-      </Card>
-
-      {/* Milestones overview */}
-      <Card title="Milestones">
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-          {campaign.milestones.map((m) => (
-            <div key={m.index} style={{ border: "2px solid var(--ink)", padding: "0.75rem" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.5rem" }}>
-                <strong>
-                  {m.index + 1}. {m.label}
-                </strong>
-                <Badge status={m.status}>{m.status.replace("_", " ")}</Badge>
-              </div>
-              <div style={{ fontSize: "0.875rem", marginTop: "0.25rem" }}>
-                Amount: {formatBaseUnits(m.amount, decimals)} tokens
-              </div>
-              <Mono text={`Vendor: ${m.vendor}`} />
-              {m.proofUri && (
-                <div style={{ fontSize: "0.875rem", wordBreak: "break-all" }}>
-                  Proof:{" "}
-                  <a href={m.proofUri} target="_blank" rel="noopener noreferrer">
-                    {m.proofUri}
-                  </a>
-                </div>
-              )}
-            </div>
-          ))}
         </div>
       </Card>
 
@@ -787,6 +922,54 @@ export const CampaignDetails: React.FC = () => {
           {approveError && (
             <div style={{ backgroundColor: "var(--pink)", padding: "0.75rem", border: "2px solid var(--ink)", fontWeight: 700 }}>
               {approveError}
+            </div>
+          )}
+        </div>
+      </Card>
+
+      {/* Task 1 — Release Funds Panel (any connected wallet) */}
+      <Card title="Release Funds (anyone can release approved milestones)">
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          <div style={{ fontSize: "0.875rem", marginBottom: "0.25rem" }}>
+            Vault token balance: <strong>{formatBaseUnits(vaultBalance, decimals)}</strong> tokens
+          </div>
+          {approvedMilestones.length === 0 ? (
+            <div style={{ fontWeight: 700 }}>No approved milestones ready for release.</div>
+          ) : (
+            approvedMilestones.map((m) => {
+              const insufficientVault = vaultBalance.lt(m.amount);
+              return (
+                <div key={m.index} style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                  <Button
+                    variant="ok"
+                    onClick={() => handleRelease(m.index)}
+                    disabled={releasingIndex !== null || !isConnected || insufficientVault}
+                  >
+                    {releasingIndex === m.index
+                      ? "Releasing…"
+                      : insufficientVault
+                        ? "Vault does not hold enough tokens yet; donate first"
+                        : `Release Milestone ${m.index + 1}`}
+                  </Button>
+                  <div style={{ fontSize: "0.875rem" }}>
+                    {m.label} — {formatBaseUnits(m.amount, decimals)} tokens (Vendor: <Mono text={m.vendor} style={{ display: "inline" }} />)
+                  </div>
+                </div>
+              );
+            })
+          )}
+          {!isConnected && <div style={{ fontWeight: 700 }}>Connect your wallet to release milestone funds.</div>}
+          {releaseError && (
+            <div style={{ backgroundColor: "var(--pink)", padding: "0.75rem", border: "2px solid var(--ink)", fontWeight: 700 }}>
+              {releaseError}
+            </div>
+          )}
+          {releaseSig && (
+            <div style={{ backgroundColor: "var(--green)", padding: "0.75rem", border: "2px solid var(--ink)", wordBreak: "break-all" }}>
+              <div style={{ fontWeight: 700 }}>Milestone funds released successfully.</div>
+              <a href={`https://explorer.solana.com/tx/${releaseSig}?cluster=devnet`} target="_blank" rel="noopener noreferrer">
+                View on Explorer ↗
+              </a>
             </div>
           )}
         </div>
