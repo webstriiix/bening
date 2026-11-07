@@ -2,44 +2,45 @@
 
 > **Donations you can see through.**
 
-*Bening* is Indonesian for "clear" or "transparent". Bening is a donation platform on Solana where every donation is held in on-chain escrow and released in milestones, directly to vendors, only after organizers document how the money will be spent.
-
-**Quick links**
+*Bening* is Indonesian for "clear" or "transparent". Bening is a donation platform on Solana (devnet) where every donation is held in on-chain escrow and released milestone by milestone, directly to vendors, only after the organizer submits proof and a designated verifier approves it.
 
 | | |
 |---|---|
-| Live demo | `<Coming Soon>` |
-| Demo video | `<Coming Soon>` |
-| Program ID (devnet) | `<Coming soon>` |
-| Slides | `<Coming Soon>` |
+| Live demo | `TODO: https://...` |
+| Demo video | `TODO: https://...` |
+| Slides | `TODO: https://...` |
+| Program ID (devnet) | `3uemNohfUixociV872GGK1e4Dh2PRbPiNYT2SMgKXh5y` |
+
+Built for the Encode Club x Solana Foundation Hackathon 2026, track **Best Consumer App on Solana**.
 
 ---
 
 ## The problem
 
-Today, donors send money to an organizer's account and hope for the best. Receipts are optional, spending is reported after the fact (if at all), and there is no way to verify that rice was actually bought or that cement actually reached the construction site. Trust is the whole product, and it is easy to break.
+Donors send money to an organizer's account and hope for the best. Spending is reported after the fact, if at all, and nobody can verify that the rice was bought or the cement delivered. Trust is the whole product, and it is easy to break.
 
 ## The solution
 
-Bening removes the need to trust the organizer by making the money *programmable*:
+Bening removes the need to trust the organizer by making the money programmable.
 
-1. **Create a campaign.** The organizer defines a target and a list of milestones, each with a description (e.g. "Buy 500 kg of rice"), an amount, and the wallet of the vendor who will be paid.
-2. **Donate.** Donors send USDC. Funds go into a vault controlled by the program, not by any person.
-3. **Document.** After buying the goods, the organizer uploads proof (receipt, photo) to decentralized storage and submits its hash on-chain.
-4. **Verify.** A designated verifier reviews the proof and approves the milestone.
-5. **Release.** Only then does the program pay out that milestone's amount, **directly to the vendor's wallet**.
-6. **Audit.** Every donation, proof, approval and payout appears on a public timeline anyone can check.
+1. **Create a campaign.** The organizer defines 1 to 5 milestones, each with a label, an amount and a vendor wallet, plus a verifier wallet.
+2. **Donate.** Donors send tokens into a vault controlled by the program, not by any person.
+3. **Submit proof.** The organizer submits a proof URL. The app computes its SHA-256 hash and stores hash and URL on-chain.
+4. **Approve.** The verifier reviews the proof and approves the milestone.
+5. **Release.** Anyone can trigger the payout. The milestone amount goes from the vault **directly to the vendor**.
+6. **Audit.** Every donation, proof, approval and payout appears on a public timeline.
 
-If the organizer does not document a milestone, the money does not move.
+If a milestone is not documented and approved, its money does not move.
 
 ## How Solana powers Bening
 
-- **Escrow without a custodian.** The campaign vault is a program-derived address (PDA). No private key controls it; only the program's logic can move funds.
-- **Milestone state machine on-chain.** Each milestone moves through `Pending → ProofSubmitted → Approved → Released`. The program rejects any transition that skips a step, so a payout without proof is impossible by construction.
-- **Tamper-evident proof.** The hash of each receipt or photo is stored on-chain. The file itself lives on IPFS/Arweave, and anyone can recompute the hash and compare.
-- **Direct-to-vendor payments.** Funds are sent to the vendor's wallet, never through the organizer.
-- **Public, auditable ledger.** All state is readable by anyone, so the timeline in the UI is a view of real on-chain data, not a database we control.
-- **Fast and cheap.** Low fees and quick finality make small donations (a few dollars) practical, which is what everyday donors actually give.
+- **Escrow without a custodian.** The vault is the associated token account of the Campaign PDA. No private key controls it; only the program can sign transfers out of it (CPI `transfer_checked` signed with the PDA seeds).
+- **On-chain milestone state machine.** `Pending -> ProofSubmitted -> Approved -> Released`, one step at a time, never backward. A payout without proof is impossible by construction.
+- **Role enforcement in the program.** Only the organizer can submit proof, only the verifier can approve (`has_one` constraints on the Campaign PDA).
+- **Tamper-evident proof.** A SHA-256 hash of the proof is stored on-chain with its URI and timestamps.
+- **Direct-to-vendor payments.** Funds never pass through the organizer.
+- **Public, auditable ledger.** The timeline in the UI is a view of real on-chain data, not a database we control.
+- **Fast and cheap.** Low fees make small donations practical.
 
 ## Architecture
 
@@ -47,89 +48,92 @@ If the organizer does not document a milestone, the money does not move.
 
 | Account | Purpose |
 |---|---|
-| `Campaign` | Organizer, verifier, token mint, target amount, total raised, vault balance, status |
-| `Milestone` | Campaign reference, description, amount, vendor wallet, status, proof hash |
-| `Donation` | Donor, campaign, amount, timestamp (for the public history) |
-| Vault (PDA) | Token account holding the campaign's USDC, owned by the program |
+| `Campaign` (PDA: `"campaign"`, organizer, campaign_id) | Organizer, verifier, mint, title, metadata URI (used as image URL), target, total raised, total released, donation count, status, and up to 5 milestones (label, amount, vendor, status, proof hash, proof URI, timestamps) |
+| `Donation` (PDA: `"donation"`, campaign, index) | One record per donation: donor, amount, timestamp |
+| Vault | Associated token account of the Campaign PDA for the campaign's mint |
 
 ### Instructions
 
-| Instruction | Who can call it | What it does |
+| Instruction | Caller | Effect |
 |---|---|---|
 | `create_campaign` | Organizer | Creates the campaign, its milestones and the vault |
-| `donate` | Anyone | Transfers USDC from the donor into the vault and records the donation |
-| `submit_proof` | Organizer | Attaches a proof hash to a milestone (`Pending → ProofSubmitted`) |
-| `approve_milestone` | Verifier | Approves a milestone with proof (`ProofSubmitted → Approved`) |
-| `release_funds` | Anyone | Pays the milestone amount from the vault to the vendor (`Approved → Released`) |
+| `donate` | Anyone | Transfers tokens into the vault and records the donation |
+| `submit_proof` | Organizer | `Pending -> ProofSubmitted` (hash, URI, timestamp) |
+| `approve_milestone` | Verifier | `ProofSubmitted -> Approved` |
+| `release_funds` | Anyone | `Approved -> Released`; pays the vendor from the vault |
 
-### Failure handling
+The vendor's token account is created by the frontend (idempotent create-ATA in the same transaction); the program only validates it.
 
-- `release_funds` fails unless the milestone is `Approved`.
-- `submit_proof` and `approve_milestone` can only be called by the organizer and the verifier respectively.
-- A milestone can be released only once, and the amount can never exceed the vault balance.
+### Security notes
+
+- Campaign PDA seeds and bump are checked on every instruction.
+- The token program is pinned to the original SPL Token program on `release_funds` and `donate`.
+- The vault must be the ATA of the Campaign PDA for the campaign mint.
+- Release requires status `Approved`, so a milestone can be paid only once, and never more than the vault balance.
+- State is updated before the token transfer CPI.
+- Negative tests assert exact error codes (wrong role, wrong status, zero hash, URI too long, wrong mint, fake vault, wrong token program, and others).
+
+### Known limitations
+
+- Devnet only; no mainnet deployment.
+- One verifier per campaign; no donor voting.
+- No refunds or expiry for failed campaigns.
+- Proof is a pasted URL. The stored hash is the SHA-256 of the URL text, not of the file behind it.
+- Create, donate and proof hardening for the original Token program is enforced on `donate` and `release_funds`; `create_campaign` still accepts the token interface type (tracked as technical debt).
 
 ## Tech stack
 
-- **Program:** Rust, [Anchor](https://www.anchor-lang.com/)
-- **Token:** USDC (SPL Token) on devnet
-- **Frontend:** `<Coming Soon>` with Solana wallet adapter (Phantom)
-- **Proof storage:** `<Coming Soon>`
+- **Program:** Rust, Anchor 1.2.1 (`anchor-lang` and `anchor-spl` pinned to `=1.2.1`), original SPL Token program
+- **Tests:** Rust with LiteSVM 0.10.0 (46 tests)
+- **Frontend:** Vite, React, TypeScript, Solana wallet adapter (Phantom and Solflare), Anchor client, neobrutalism styling in plain CSS
+- **Network:** Solana devnet
 
-## Toolchain & Testing
+## Toolchain
 
-- `anchor-cli 1.2.1`
-- `solana-cli 4.1.2`
-- `rustc/cargo 1.89.0` (project, via `rust-toolchain.toml`)
-- `node v24.21.0`
-- `npm 11.19.0`
-
-Verified passing test commands:
-
-```bash
-cargo test --manifest-path programs/bening/Cargo.toml --test test_initialize
-cargo test --manifest-path programs/bening/Cargo.toml --test token_smoke
-```
-
-`anchor build` completes cleanly with `anchor-lang = "=1.2.1"` and `anchor-spl = "=1.2.1"`.
-
----
+- anchor-cli 1.2.1, solana-cli 4.1.2
+- rustc/cargo 1.89.0 (via `rust-toolchain.toml`)
+- node v24.x, npm 11.x
 
 ## Getting started
 
 ### Prerequisites
 
-- [Rust](https://www.rust-lang.org/tools/install)
-- [Solana CLI](https://solana.com/docs/intro/installation)
-- [Anchor](https://www.anchor-lang.com/docs/installation)
-- Node.js 18+ and a package manager (npm, pnpm or yarn)
-- A Solana wallet such as Phantom, set to **devnet**
+Rust, Solana CLI, Anchor CLI, Node.js, and a Phantom or Solflare wallet set to **devnet**.
 
-### Clone and build
+### Clone
 
 ```bash
-git clone https://github.com/webstriiix/bening.git
+git clone https://github.com/TODO-user/TODO-repo.git
 cd bening
-anchor build
 ```
 
-### Run the tests
+### Build and test the program
+
+`anchor build` currently produces SBPF v3 binaries that LiteSVM 0.10.0 rejects, so the tests use the v0 build:
 
 ```bash
-anchor test
+cd programs/bening && cargo build-sbf --arch v0 && cd ../..
+cargo test
 ```
 
-This starts a local validator, deploys the program and runs the test suite, including the failure case where a release without proof is rejected.
+Expected: all tests pass (46).
 
 ### Deploy to devnet
 
 ```bash
 solana config set --url devnet
-solana airdrop 2          # or use https://faucet.solana.com if rate-limited
-anchor build
-anchor deploy
+solana program deploy target/deploy/bening.so --program-id target/deploy/bening-keypair.json
 ```
 
-Copy the deployed program ID into `Anchor.toml` and the frontend config.
+The deployed program ID is `3uemNohfUixociV872GGK1e4Dh2PRbPiNYT2SMgKXh5y`. Devnet accepted the `--arch v0` binary.
+
+### IDL
+
+```bash
+cd programs/bening && anchor idl build -o ../../target/idl/bening.json
+```
+
+A copy lives in `app/src/idl/bening.json`.
 
 ### Run the frontend
 
@@ -139,34 +143,38 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000`, connect your wallet (devnet) and you are ready to go.
+Open `http://localhost:5173` and connect a wallet on devnet.
 
-## Demo walkthrough
+## Try it (demo walkthrough)
 
-1. Connect a wallet as the **organizer** and create a campaign with two milestones (for example, "Buy 100 kg of rice" and "Buy 20 sacks of cement").
-2. Switch to a **donor** wallet and donate devnet USDC. Watch the vault balance and the public timeline update.
-3. As the organizer, try to release funds for a milestone. **The transaction is rejected** because no proof exists.
-4. Upload a receipt, submit its hash with `submit_proof`, then approve it as the **verifier**.
-5. Call `release_funds`. The vendor's wallet receives the payment, and the timeline shows donation, proof, approval and payout in order.
+You need three wallets on devnet with a little SOL each: **organizer**, **verifier**, and a **vendor** address (the vendor does not need to connect). A donor can be the organizer for a quick test.
+
+1. **Faucet** (`/faucet`): create a test mint, then "Mint tokens to me". These are test tokens, not USDC. SOL pays transaction fees; the test token is what gets donated.
+2. **Create** (`/create`): title, the mint, the verifier address, and 1 to 5 milestones with vendor addresses. You are redirected to the campaign page.
+3. **Donate** (`/c/<campaign>`): donate up to the target. Tokens go into the vault.
+4. **Submit proof** (organizer): paste a proof URL. Status becomes `ProofSubmitted`.
+5. **Approve** (switch to the verifier wallet): status becomes `Approved`.
+6. **Release** (any wallet): the vendor receives the tokens, and the public timeline shows donation, proof, approval and payout with timestamps.
 
 ## Project status
 
-- [ ] Anchor program: campaign, milestones, donation, vault
-- [ ] Proof submission and verifier approval
-- [ ] Fund release to vendor wallets
-- [ ] Tests (happy path and rejected release)
-- [ ] Devnet deployment
-- [ ] Frontend: create campaign, donate, public timeline
+- [x] Anchor program: campaign, milestones, donation, vault
+- [x] Proof submission and verifier approval
+- [x] Fund release to vendor
+- [x] Tests (happy path and negative cases)
+- [x] Devnet deployment
+- [x] Frontend: create, donate, proof, approve, release, public timeline, campaign list
 - [ ] Proof upload to decentralized storage
-- [ ] Demo video
+- [ ] Proof verification button (recompute hash and compare)
 
 ## Roadmap
 
-- **Cross-chain donations with Aurora Intents.** Give each campaign a persistent deposit address that accepts funds from many chains and settles them into USDC on Solana, so donors do not need to bridge manually.
-- **Donor voting.** Let donors take part in approving milestones, in addition to a single verifier.
-- **Campaign expiry and refunds.** Return unspent funds to donors if a campaign fails to document its milestones in time.
-- **Verifier reputation.** Track the history of organizers and verifiers on-chain.
+- Donor voting on milestones in addition to a verifier
+- Campaign expiry and refunds
+- Verifier reputation
+- Proof files on IPFS/Arweave with file-level hashing
+- Cross-chain donations (Aurora Intents), mainnet-only so out of scope for this hackathon
 
 ## License
 
-MIT
+MIT (`TODO: add a LICENSE file`)
