@@ -17,6 +17,10 @@ interface MilestoneRow {
   vendor: string;
 }
 
+/*
+ * NOTE: The UI is unverified; only the human tests in the browser.
+ */
+
 export const CreateCampaign: React.FC = () => {
   const { connection } = useConnection();
   const wallet = useAnchorWallet();
@@ -53,6 +57,14 @@ export const CreateCampaign: React.FC = () => {
     const updated = [...milestones];
     updated[index][field] = val;
     setMilestones(updated);
+  };
+
+  // Client-side validation for image URL
+  const isValidImageUrl = (url: string): boolean => {
+    if (!url.trim()) return true; // empty is valid (optional)
+    const trimmed = url.trim();
+    if (!trimmed.startsWith("https://")) return false;
+    return new TextEncoder().encode(trimmed).length <= 128;
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -103,6 +115,12 @@ export const CreateCampaign: React.FC = () => {
     // 4. Milestones validation (1-5)
     if (milestones.length === 0 || milestones.length > 5) {
       setError("Campaign must have between 1 and 5 milestones.");
+      return;
+    }
+
+    // 5. Image URL validation
+    if (!isValidImageUrl(metadataUri)) {
+      setError("Image URL must be empty or start with https:// and be at most 128 bytes.");
       return;
     }
 
@@ -224,6 +242,9 @@ export const CreateCampaign: React.FC = () => {
     }
   };
 
+  // Live image preview when valid image URL
+  const showPreview = metadataUri.trim() && isValidImageUrl(metadataUri);
+
   return (
     <div style={{ maxWidth: "700px", margin: "2rem auto", display: "flex", flexDirection: "column", gap: "1.5rem" }}>
       <Card title="Create Campaign">
@@ -264,12 +285,29 @@ export const CreateCampaign: React.FC = () => {
             required
           />
 
-          <TextInput
-            label="Metadata URI (Optional)"
-            placeholder="https://example.com/metadata.json"
-            value={metadataUri}
-            onChange={(e) => setMetadataUri(e.target.value)}
-          />
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+            <label style={{ fontWeight: 700 }}>Image URL (optional, https://...)</label>
+            <input
+              className="text-input"
+              type="text"
+              placeholder="https://example.com/image.png"
+              value={metadataUri}
+              onChange={(e) => setMetadataUri(e.target.value)}
+            />
+            {metadataUri.trim() && !isValidImageUrl(metadataUri) && (
+              <div style={{ fontSize: "0.75rem", color: "var(--pink)", fontWeight: 700 }}>
+                Must be empty or start with https:// and be at most 128 bytes.
+              </div>
+            )}
+            {showPreview && (
+              <img
+                src={metadataUri.trim()}
+                alt="Preview"
+                style={{ maxWidth: "100%", maxHeight: "200px", border: "2px solid var(--ink)", marginTop: "0.5rem" }}
+                referrerPolicy="no-referrer"
+              />
+            )}
+          </div>
 
           <div style={{ borderTop: "2px solid var(--ink)", paddingTop: "1rem" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>

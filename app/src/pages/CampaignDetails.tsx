@@ -53,6 +53,7 @@ interface CampaignView {
   mint: string;
   campaignId: BN;
   title: string;
+  metadata_uri: string;
   status: "active" | "completed";
   targetAmount: BN;
   totalRaised: BN;
@@ -225,6 +226,7 @@ export const CampaignDetails: React.FC = () => {
         mint: (account.mint as PublicKey).toBase58(),
         campaignId: new BN((account.campaignId as any).toString()),
         title: account.title as string,
+        metadata_uri: (account.metadata_uri as string) || "",
         status: statusKey.toLowerCase() === "completed" ? "completed" : "active",
         targetAmount: new BN((account.targetAmount as any).toString()),
         totalRaised: new BN((account.totalRaised as any).toString()),
@@ -690,28 +692,51 @@ export const CampaignDetails: React.FC = () => {
       {/* Campaign header */}
       <Card title={campaign.title || "Untitled campaign"}>
         <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-          <div>
-            <strong>Status: </strong>
-            {campaign.status === "completed" || allMilestonesReleased ? "Completed" : "Active"}
-          </div>
-          <Mono text={`Campaign PDA: ${campaign.address}`} />
-          <Mono text={`Mint: ${campaign.mint}`} />
-          <Mono text={`Organizer: ${campaign.organizer}`} />
-          <Mono text={`Verifier: ${campaign.verifier}`} />
-          <div style={{ marginTop: "0.75rem" }}>
-            <strong>Raised: </strong>
-            {formatBaseUnits(campaign.totalRaised, decimals)} /{" "}
-            {formatBaseUnits(campaign.targetAmount, decimals)} tokens
-          </div>
-          <ProgressBar target={target} current={raised} />
-          {roleHint && (
-            <div style={{ marginTop: "0.75rem", backgroundColor: "var(--yellow)", padding: "0.75rem", border: "2px solid var(--ink)" }}>
-              <div style={{ fontWeight: 700 }}>{roleHint}</div>
-              <Mono text={`Connected:          ${walletAddress}`} />
-              <Mono text={`Expected Organizer: ${campaign.organizer}`} />
-              <Mono text={`Expected Verifier:  ${campaign.verifier}`} />
+          {/* Image rule: render image if metadata_uri starts with https:// and <=128 bytes */}
+          {campaign.metadata_uri &&
+            campaign.metadata_uri.startsWith("https://") &&
+            new TextEncoder().encode(campaign.metadata_uri).length <= 128 && (
+              <img
+                src={campaign.metadata_uri}
+                loading="lazy"
+                referrerPolicy="no-referrer"
+                alt={campaign.title || ""}
+                style={{
+                  width: "100%",
+                  maxHeight: "300px",
+                  objectFit: "cover",
+                  border: "2px solid var(--ink)",
+                  marginBottom: "1rem",
+                }}
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = "none";
+                }}
+              />
+            )}
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+            <div>
+              <strong>Status: </strong>
+              {campaign.status === "completed" || allMilestonesReleased ? "Completed" : "Active"}
             </div>
-          )}
+            <Mono text={`Campaign PDA: ${campaign.address}`} />
+            <Mono text={`Mint: ${campaign.mint}`} />
+            <Mono text={`Organizer: ${campaign.organizer}`} />
+            <Mono text={`Verifier: ${campaign.verifier}`} />
+            <div style={{ marginTop: "0.75rem" }}>
+              <strong>Raised: </strong>
+              {formatBaseUnits(campaign.totalRaised, decimals)} /{" "}
+              {formatBaseUnits(campaign.targetAmount, decimals)} tokens
+            </div>
+            <ProgressBar target={target} current={raised} />
+            {roleHint && (
+              <div style={{ marginTop: "0.75rem", backgroundColor: "var(--yellow)", padding: "0.75rem", border: "2px solid var(--ink)" }}>
+                <div style={{ fontWeight: 700 }}>{roleHint}</div>
+                <Mono text={`Connected:          ${walletAddress}`} />
+                <Mono text={`Expected Organizer: ${campaign.organizer}`} />
+                <Mono text={`Expected Verifier:  ${campaign.verifier}`} />
+              </div>
+            )}
+          </div>
         </div>
       </Card>
 
@@ -793,6 +818,10 @@ export const CampaignDetails: React.FC = () => {
             placeholder="10"
             disabled={!isConnected || !isCampaignActive}
           />
+          {/* Need test tokens link */}
+          <div style={{ fontSize: "0.875rem", marginTop: "0.5rem" }}>
+            Need test tokens? <a href="/faucet">Use the Faucet</a>
+          </div>
           <Button
             variant="primary"
             onClick={handleDonate}
