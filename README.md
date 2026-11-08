@@ -175,6 +175,3 @@ You need three wallets on devnet with a little SOL each: **organizer**, **verifi
 - Proof files on IPFS/Arweave with file-level hashing
 - Cross-chain donations (Aurora Intents), mainnet-only so out of scope for this hackathon
 
-## License
-
-MIT (`TODO: add a LICENSE file`)
