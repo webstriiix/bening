@@ -6,9 +6,9 @@
 
 | | |
 |---|---|
-| Live demo | `TODO: https://...` |
-| Demo video | `TODO: https://...` |
-| Slides | `TODO: https://...` |
+| Live demo | `https://bening-roan.vercel.app/` |
+| Demo video | `https://youtu.be/wRqfLwSvop0?si=RO1nJOUd0Hp_YR78` |
+| Slides | `https://canva.link/9nidgtdetrv4nd9` |
 | Program ID (devnet) | `3uemNohfUixociV872GGK1e4Dh2PRbPiNYT2SMgKXh5y` |
 
 Built for the Encode Club x Solana Foundation Hackathon 2026, track **Best Consumer App on Solana**.
